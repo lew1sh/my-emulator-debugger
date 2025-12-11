@@ -1,0 +1,67 @@
+{
+  "name": "my-emulator-debugger",
+  "displayName": "My Emulator Debugger",
+  "description": "VS Code debugger for my C++ emulator",
+  "version": "0.0.1",
+  "publisher": "tim",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Debuggers"
+  ],
+  "activationEvents": [
+    "onDebugResolve:my-emulator"
+  ],
+  "main": "./out/extension.js",
+
+  "contributes": {
+    "breakpoints": [
+      {
+        "language": "plaintext"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "my-emulator",
+        "label": "My Emulator Debugger",
+        "languages": [
+          "plaintext"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Path to program file"
+              }
+            },
+            "required": [
+              "program"
+            ]
+          }
+        },
+        "initialConfigurations": [
+          {
+            "name": "My Emulator: Launch",
+            "type": "my-emulator",
+            "request": "launch",
+            "program": "${workspaceFolder}/program.emu"
+          }
+        ]
+      }
+    ]
+  }
+,
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "echo \"No tests\""
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0",
+    "vscode": "^1.1.37"
+  }
+}

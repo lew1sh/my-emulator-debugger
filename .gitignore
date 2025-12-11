@@ -1,0 +1,32 @@
+# CMake build
+/build/
+/CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/Makefile
+
+# VSCode extension
+/vscode-extension/node_modules/
+/vscode-extension/out/
+/vscode-extension/.vscode-test/
+
+# VSCode IDE stuff
+.vscode/
+*.code-workspace
+
+# Mac OS
+.DS_Store
+
+# Бинарники
+*.o
+*.obj
+*.exe
+*.out
+*.a
+*.so
+*.dll
+*.dylib
+
+# Логи
+*.log
+
