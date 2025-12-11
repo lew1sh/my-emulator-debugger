@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('my-emulator debugger extension activated');
@@ -8,16 +9,19 @@ export function activate(context: vscode.ExtensionContext) {
             session: vscode.DebugSession
         ): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
 
-            // Берём путь к debug_adapter из конфигурации запуска
-            const cfg: any = session.configuration;
-            const command: string | undefined = cfg.debugAdapterPath;
+            
+            const exeName = process.platform === 'win32'
+                ? 'debug_adapter.exe'
+                : 'debug_adapter';
 
-            if (!command) {
-                vscode.window.showErrorMessage(
-                    "My Emulator Debugger: 'debugAdapterPath' is not set in launch.json"
-                );
-                return undefined;
-            }
+            const command = path.join(
+                context.extensionPath,
+                'bin',
+                exeName
+            );
+
+            
+            console.log(`My Emulator Debugger: using adapter at ${command}`);
 
             return new vscode.DebugAdapterExecutable(command, []);
         }
