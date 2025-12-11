@@ -1,54 +1,135 @@
 
 # My Emulator Debugger
 
-Учебный проект: простой эмулятор "виртуальной машины" на C++ + Debug Adapter (DAP) + отладчик для Visual Studio Code.
+Учебный проект: очень простой эмулятор “виртуальной машины” на C++ + Debug Adapter (DAP) + отладчик для Visual Studio Code.
 
-С помощью этого проекта можно:
+С помощью этого проекта вы можете:
 
-- запускать простые программы в текстовом формате (`program.emu`);
-- ставить точки останова (breakpoints) в файле `program.emu`;
-- выполнять программу пошагово (Step Over);
-- смотреть текущие значения регистров `pc` и `acc` в панели VARIABLES VS Code.
+- запускать и отлаживать программы в текстовом формате `program.emu`;
+- ставить точки останова (breakpoints) прямо в этом файле;
+- выполнять программу пошагово;
+- смотреть значения регистров `pc` (program counter) и `acc` (аккумулятор) в окне VARIABLES VS Code.
+
+Этот README описывает **упрощённый сценарий для пользователей**:  
+у вас есть готовое расширение `.vsix`, вы его ставите в свой VS Code и используете.
 
 ---
 
-## 1. Что внутри проекта
+## 1. Что делает эмулятор
 
-Структура репозитория (пример):
+Эмулятор — это маленькая виртуальная машина с:
+
+- `pc` — счётчик команд (индекс текущей строки программы),
+- `acc` — аккумулятор (целое число),
+- `state` — состояние: `Stopped`, `Running`, `Exited`,
+- `program` — список инструкций.
+
+Поддерживаемые команды:
+
+- `ADD N` — `acc += N; pc++`
+- `SUB N` — `acc -= N; pc++`
+- `JMP N` — `pc = N` (переход к инструкции с индексом `N`)
+- `HLT 0` — завершить выполнение (`state = Exited`)
+
+Формат файла `program.emu`:
 
 ```text
-my-vm-debugger/
-  CMakeLists.txt         # корневой CMake
-  emulator/              # C++ эмулятор
-    include/emulator.h
-    src/emulator.cpp
-  adapter/               # C++ debug adapter (реализация DAP)
-    src/debug_adapter.cpp
-  vscode-extension/      # расширение VS Code
-    package.json
-    tsconfig.json
-    src/extension.ts
-  build/                 # каталог сборки (создаётся пользователем)
+ADD 1
+ADD 2
+SUB 1
+HLT 0
 ````
 
-### Эмулятор
+Каждая строка → одна инструкция.
+**Строка 1** соответствует `pc = 0`, строка 2 → `pc = 1` и т.д.
+Поэтому breakpoints по строкам напрямую превращаются в “остановиться на таком-то `pc`”.
 
-Эмулятор хранит:
+---
 
-* `pc` — счётчик команд (номер текущей инструкции);
-* `acc` — аккумулятор (целое число);
-* `state` — состояние: `Stopped`, `Running`, `Exited`;
-* `program` — вектор инструкций (`ADD`, `SUB`, `JMP`, `HLT`);
-* `breakpoints` — множества адресов команд, где нужно остановиться.
+## 2. Требования
 
-Поддерживаемые инструкции:
+Для использования вам нужно:
 
-* `ADD N` — `acc += N; pc++`
-* `SUB N` — `acc -= N; pc++`
-* `JMP N` — `pc = N`
-* `HLT 0` — остановка программы (`state = Exited`)
+* **Visual Studio Code**
+* **компилятор C++** (g++, clang, MSVC — что-то одно)
+* **CMake ≥ 3.15** (для сборки C++-части)
 
-Файл программы (`program.emu`) — одна инструкция на строку:
+**npm / Node.js** нужны только тем, кто сам будет собирать расширение из исходников.
+Если вы ставите готовый `.vsix` — npm вам не обязателен.
+
+---
+
+## 3. Быстрый обзор архитектуры (одним абзацем)
+
+* **Эмулятор (C++)** — исполняет инструкции и хранит состояние (`pc`, `acc`, breakpoints, состояние).
+* **Debug Adapter (C++)** — процесс `debug_adapter`, который разговаривает с VS Code по Debug Adapter Protocol (DAP): читает JSON-запросы, вызывает методы эмулятора, отправляет JSON-ответы и события (`stopped`, `terminated`, `output`, `stackTrace`, `variables` и т.д.).
+* **Расширение VS Code (.vsix)** — говорит VS Code: “у меня есть новый тип отладчика `my-emulator`, вот как его запускать”, и при старте создаёт `DebugAdapterExecutable`, указывая на бинарник `debug_adapter`.
+
+---
+
+## 4. Установка расширения из `.vsix`
+
+### 4.1. Получить `.vsix`
+
+Скачайте файл вида:
+
+```text
+my-emulator-debugger-0.0.1.vsix
+```
+
+из Releases этого репозитория (или из того места, где вам его дали).
+
+### 4.2. Установить в VS Code
+
+1. Откройте **обычный** Visual Studio Code.
+2. Перейдите на вкладку **Extensions** (иконка кубика слева).
+3. Нажмите на кнопку с тремя точками `⋯` (More Actions).
+4. Выберите **Install from VSIX…**.
+5. Укажите файл `my-emulator-debugger-0.0.1.vsix`.
+6. Подтвердите установку и перезапустите VS Code, если потребуется.
+
+После этого:
+
+* VS Code **знает тип отладчика** `"my-emulator"`;
+* в `launch.json` больше не будет ошибки `Configured debug type 'my-emulator' is not supported`.
+
+---
+
+## 5. Сборка C++-части (эмулятор + debug adapter)
+
+Эмулятор и debug adapter должны быть собраны **локально**, чтобы расширение могло их запускать.
+
+### 5.1. Клонирование репозитория
+
+```bash
+git clone https://github.com/lew1sh/my-emulator-debugger.git
+cd my-emulator-debugger
+```
+
+### 5.2. Сборка через CMake
+
+```bash
+mkdir build
+cd build
+
+cmake ..
+cmake --build .
+```
+
+После успешной сборки должен появиться бинарник debug adapter, например:
+
+* на Linux/macOS:
+  `build/adapter/debug_adapter`
+* на Windows:
+  `build/adapter/Debug/debug_adapter.exe` или похожий путь
+
+**Запомните абсолютный путь** к этому файлу — он нужен в `launch.json`.
+
+---
+
+## 6. Подготовка тестовой программы
+
+Откройте отдельную папку для своего кода (это может быть сам репозиторий или любая другая директория) и создайте файл `program.emu`:
 
 ```text
 ADD 1
@@ -57,133 +138,19 @@ SUB 1
 HLT 0
 ```
 
-### Debug Adapter
+Убедитесь, что:
 
-Бинарник `debug_adapter` (C++):
-
-* запускается VS Code как отдельный процесс;
-* читает JSON-сообщения DAP из `stdin`;
-* вызывает методы эмулятора (`loadProgram`, `run`, `step`, управление брейкпоинтами);
-* отправляет ответы и события (initialize, stopped, terminated, output, stackTrace, scopes, variables и т.д.) в `stdout` в формате DAP.
-
-### Расширение VS Code
-
-Папка `vscode-extension/`:
-
-* `package.json` — манифест расширения:
-
-  * регистрирует новый тип отладчика `"my-emulator"`;
-  * включает поддержку breakpoints для языка `plaintext`;
-  * добавляет шаблон конфигурации запуска.
-* `tsconfig.json` — сборка TypeScript → JS в `out/`.
-* `src/extension.ts`:
-
-  * реализует `activate()`;
-  * регистрирует фабрику `DebugAdapterDescriptorFactory`;
-  * указывает путь к бинарнику `debug_adapter`.
+* файл открыт в VS Code,
+* в статусной строке (справа внизу) язык файла — **Plain Text**
+  (если нет, кликните и выберите “Plain Text”).
 
 ---
 
-## 2. Требования
+## 7. Настройка `launch.json`
 
-Для сборки и запуска нужны:
+В этой же папке откройте/создайте `.vscode/launch.json`.
 
-* **C++ компилятор** с поддержкой C++17 (g++, clang, MSVC);
-* **CMake** версии 3.15+;
-* **Node.js + npm**;
-* **Visual Studio Code**.
-
----
-
-## 3. Сборка C++ части (эмулятор + debug adapter)
-
-В корне проекта:
-
-```bash
-cd my-vm-debugger
-
-mkdir build
-cd build
-
-cmake ..
-cmake --build .
-```
-
-После успешной сборки должны появиться, например:
-
-* `build/emulator/libemulator.a` (или аналогичная библиотека),
-* `build/adapter/debug_adapter` — **главный бинарник debug adapter**.
-
-Запомните путь к `debug_adapter`, он понадобится расширению VS Code.
-
----
-
-## 4. Настройка расширения VS Code
-
-### 4.1. Установка зависимостей и сборка TypeScript
-
-```bash
-cd vscode-extension
-npm install
-npm run compile    # скомпилирует src/extension.ts в out/extension.js
-```
-
-### 4.2. Проверить путь к `debug_adapter`
-
-В файле `vscode-extension/src/extension.ts` есть строка:
-
-```ts
-const command = "/Users/tim/Desktop/my-vm-debugger/build/adapter/debug_adapter";
-```
-
-Её нужно заменить на **реальный путь** до `debug_adapter` на вашей машине, например:
-
-```ts
-const command = "/ABSOLUTE/PATH/TO/my-vm-debugger/build/adapter/debug_adapter";
-```
-
-После изменения — снова:
-
-```bash
-npm run compile
-```
-
----
-
-## 5. Как запускать отладчик в VS Code
-
-### 5.1. Запуск расширения в режиме разработки
-
-1. Откройте папку `vscode-extension/` в обычном VS Code.
-2. Убедитесь, что файл `out/extension.js` существует (после `npm run compile`).
-3. Нажмите `F5` — запустится второе окно **Extension Development Host**.
-   Это отдельный VS Code, в котором расширение уже активно.
-
-Дальнейшие шаги выполняются **в этом втором окне**.
-
-### 5.2. Подготовить файл программы
-
-В окне Extension Development Host:
-
-1. Откройте папку с проектом / или любую папку, где будет лежать программа.
-
-2. Создайте файл `program.emu`, например:
-
-   ```text
-   ADD 1
-   ADD 2
-   SUB 1
-   HLT 0
-   ```
-
-3. Убедитесь, что для файла выбран язык **Plain Text** (в правом нижнем углу VS Code).
-
-### 5.3. Создать `launch.json`
-
-Откройте командную палитру (Ctrl+Shift+P / Cmd+Shift+P):
-
-* выберите **“Debug: Open launch.json”** (или “Добавить конфигурацию”),
-* добавьте конфигурацию:
+Пример конфигурации:
 
 ```json
 {
@@ -193,57 +160,147 @@ npm run compile
       "name": "My Emulator: Launch",
       "type": "my-emulator",
       "request": "launch",
-      "program": "${workspaceFolder}/program.emu"
+
+      "program": "${workspaceFolder}/program.emu",
+      "debugAdapterPath": "/ABSOLUTE/PATH/TO/my-emulator-debugger/build/adapter/debug_adapter"
     }
   ]
 }
 ```
 
-`program` — путь к файлу `program.emu` (можно изменить под свою структуру).
+Где:
 
-### 5.4. Отладка
+* `"program"` — путь к вашему файлу `program.emu`;
+* `"debugAdapterPath"` — **абсолютный путь** к бинарнику `debug_adapter`,
+  который вы собрали в разделе 5. Например:
 
-1. Откройте `program.emu`.
-2. Поставьте одну или несколько точек останова (breakpoint) по строкам с инструкциями.
-3. В боковой панели **Run and Debug** выберите конфигурацию
-   **“My Emulator: Launch”**.
-4. Нажмите **Start Debugging** (зелёный треугольник) или F5.
+  ```json
+  "debugAdapterPath": "/Users/username/projects/my-emulator-debugger/build/adapter/debug_adapter"
+  ```
 
-Во время отладки:
+Если `debugAdapterPath` не указан или указан неверно, расширение покажет ошибку:
 
-* **Continue (F5)** — выполняет программу до следующего breakpoint или конца;
-* **Step Over (F10)** — выполняет одну инструкцию;
-* в панели **VARIABLES** отображаются:
+> My Emulator Debugger: 'debugAdapterPath' is not set in launch.json
 
-  * `pc` — текущий индекс инструкции;
+---
+
+## 8. Запуск отладки
+
+1. Откройте свою рабочую папку в VS Code (ту, где лежит `program.emu` и `.vscode/launch.json`).
+2. Откройте файл `program.emu`.
+3. Поставьте breakpoint (красный кружок слева от номера строки) на одной или нескольких строках.
+4. Перейдите на вкладку **Run and Debug** (зелёный треугольник слева).
+5. В списке конфигураций выберите **My Emulator: Launch**.
+6. Нажмите **F5** (Start Debugging).
+
+Что будет:
+
+* расширение запустит бинарник `debug_adapter`, указанный в `debugAdapterPath`;
+* VS Code начнёт общаться с ним по Debug Adapter Protocol (DAP);
+* debug adapter загрузит `program.emu`, запустит эмулятор и сразу остановится на входе (`reason: "entry"`).
+
+Дальше можно:
+
+* нажимать **Continue (F5)** — выполнение идёт до следующего breakpoint или до конца;
+* нажимать **Step Over (F10)** — выполняется одна инструкция;
+* в окне **VARIABLES** видеть:
+
+  * `pc` — текущий индекс инструкции (0 = первая строка),
   * `acc` — значение аккумулятора;
-* в **CALL STACK** отображается один фрейм `main`;
-* в **Debug Console** видны служебные сообщения адаптера:
+* в окне **CALL STACK** видеть фрейм `main`;
+* в **Debug Console** видеть служебные сообщения адаптера:
 
-  * запуск сессии,
+  * старт сессии,
   * установка breakpoint’ов,
   * остановка на breakpoint,
   * завершение программы.
 
 ---
 
-## 6. Типичный сценарий использования
+## 9. Типичный сценарий “от начала до конца”
 
-1. Пользователь клонирует репозиторий.
-2. Собирает C++ проект через CMake (`cmake ..`, `cmake --build .`).
-3. Собирает и настраивает VS Code-расширение (`npm install`, `npm run compile`, настраивает путь к `debug_adapter`).
-4. Запускает Extension Development Host (F5 в `vscode-extension`).
-5. В нём открывает папку с `program.emu`, создаёт `launch.json`.
-6. Запускает отладку и управляет выполнением программы через стандартные кнопки VS Code.
+1. Поставили VS Code.
+
+2. Установили расширение из `my-emulator-debugger-0.0.1.vsix`.
+
+3. Клонировали репозиторий и собрали C++:
+
+   ```bash
+   cd my-emulator-debugger
+   mkdir build && cd build
+   cmake ..
+   cmake --build .
+   ```
+
+4. Запомнили путь к `build/adapter/debug_adapter`.
+
+5. В любой удобной папке создали `program.emu`.
+
+6. Создали `.vscode/launch.json` с `"type": "my-emulator"` и указали `debugAdapterPath`.
+
+7. Запустили отладку, поставили breakpoint’ы, посмотрели `pc`/`acc`.
 
 ---
 
-## 7. Ограничения и заметки
+## 10. Частые вопросы / проблемы
 
-* Эмулятор очень простой: нет памяти, нет стека, только `pc` и `acc`.
-* Каждая строка в `program.emu` соответствует одной инструкции и напрямую мапится на `pc`:
+### 10.1. В `launch.json` подчёркивает `"type": "my-emulator"`
 
-  * строка 1 → `pc = 0`,
-  * строка 2 → `pc = 1`, и т.д.
-* Debug Adapter реализует только базовые команды DAP (`initialize`, `launch`, `setBreakpoints`, `continue`, `next`, `threads`, `stackTrace`, `scopes`, `variables`, `disconnect`).
+Сообщение `Configured debug type 'my-emulator' is not supported` означает, что:
+
+* расширение **не установлено**,
+  или
+* установлено не в тот VS Code (например, одно окно — обычный VS Code, другое — другой профиль).
+
+Решение:
+
+* убедитесь, что `.vsix` установлен в этот VS Code (см. раздел 4);
+* перезапустите VS Code после установки расширения.
+
+---
+
+### 10.2. При запуске отладки ошибка про `debugAdapterPath`
+
+Проверьте:
+
+* в `launch.json` есть поле `"debugAdapterPath"`;
+* путь **абсолютный**;
+* файл там действительно существует и исполняемый (на Linux/macOS: `chmod +x debug_adapter` при необходимости).
+
+---
+
+### 10.3. `npm install` пишет про vulnerabilities
+
+Если вы **просто пользователь и ставите `.vsix`**, вам не нужно запускать `npm install` вообще.
+
+`npm install` и предупреждения про `vulnerabilities` имеют значение только для тех, кто **сам собирает расширение из исходников**. Для запуска готового `.vsix` это не важно.
+
+---
+
+## 11. Для разработчиков (очень коротко)
+
+Если вы хотите не только использовать, но и править расширение:
+
+1. В `vscode-extension/`:
+
+   ```bash
+   cd vscode-extension
+   npm install
+   npm run compile
+   ```
+
+2. Меняете код в `src/extension.ts`.
+
+3. Снова `npm run compile` → обновляется `out/extension.js`.
+
+4. Чтобы собрать новый `.vsix`:
+
+   ```bash
+   npm install -g @vscode/vsce
+   vsce package
+   ```
+
+   Появится новый файл `my-emulator-debugger-<version>.vsix`.
+
+Основной сценарий для обычного пользователя описан в разделах 4–9.
 

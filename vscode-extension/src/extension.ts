@@ -8,8 +8,16 @@ export function activate(context: vscode.ExtensionContext) {
             session: vscode.DebugSession
         ): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
 
-            // Путь к C++ binary debug_adapter
-            const command = "/Users/tim/Desktop/my-vm-debugger/build/adapter/debug_adapter";
+            // Берём путь к debug_adapter из конфигурации запуска
+            const cfg: any = session.configuration;
+            const command: string | undefined = cfg.debugAdapterPath;
+
+            if (!command) {
+                vscode.window.showErrorMessage(
+                    "My Emulator Debugger: 'debugAdapterPath' is not set in launch.json"
+                );
+                return undefined;
+            }
 
             return new vscode.DebugAdapterExecutable(command, []);
         }
